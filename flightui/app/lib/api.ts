@@ -32,6 +32,22 @@ export interface FlightResponse {
   position_source: number | null;
 }
 
+export interface PlaneResponse {
+  icao24: string;
+  manufacturerName: string | null;
+  model: string | null;
+  typecode: string | null;
+  registration: string | null;
+  operator: string | null;
+  operatorIcao: string | null;
+  country: string | null;
+  built: number | null;
+  engines: number | null;
+  categoryDescription: string | null;
+  serialNumber: string | null;
+  owner: string | null;
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     ...init,
@@ -99,6 +115,12 @@ export const api = {
       max_lat: String(bounds.maxLat),
     });
     return request<FlightResponse[]>(`/flights?${params}`, {
+      headers: { Authorization: `Bearer ${access_token}` },
+    });
+  },
+
+  plane(icao24: string, access_token: string) {
+    return request<PlaneResponse>(`/planes/${icao24}`, {
       headers: { Authorization: `Bearer ${access_token}` },
     });
   },
