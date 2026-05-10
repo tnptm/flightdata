@@ -3,6 +3,7 @@
 import { useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { useAuth } from "../../lib/auth-context";
 
 export default function LoginPage() {
@@ -29,6 +30,9 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="w-full max-w-sm bg-white rounded-2xl shadow p-8 space-y-6">
+        <div className="flex justify-center">
+          <Image src="/logo2.png" alt="FlightData logo" width={180} height={60} priority />
+        </div>
         <h1 className="text-2xl font-bold text-gray-900">Sign in</h1>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>

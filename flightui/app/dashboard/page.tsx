@@ -9,7 +9,7 @@ import { api, FlightResponse } from "../lib/api";
 // FlightMap uses Leaflet (browser-only) — disable SSR
 const FlightMap = dynamic(() => import("../components/FlightMap"), { ssr: false });
 
-const POLL_INTERVAL_MS = 15_000;
+const POLL_INTERVAL_MS = 19_900;
 
 export default function DashboardPage() {
   const { user, accessToken, logout, loading } = useAuth();
