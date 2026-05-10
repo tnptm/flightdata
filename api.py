@@ -1,5 +1,5 @@
 import os
-
+import asyncio
 
 import asyncpg
 from contextlib import asynccontextmanager
@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from datetime import datetime
 from backend.users import router as users_router
 from backend.auth import get_current_user
+from backend.services.flight_route import get_flight_route
 from dotenv import load_dotenv
 
 load_dotenv()  # must run before any module that reads env vars at import time
@@ -71,6 +72,15 @@ class PlaneResponse(BaseModel):
     status: str | None = None
     typecode: str | None = None
     vdl: int | None = None
+
+
+class RouteFlight(BaseModel):
+    is_live: bool = False
+    callsign: str | None = None
+    departure_airport: str | None = None
+    arrival_airport: str | None = None
+    first_seen: str | None = None
+    last_seen: str | None = None
 
 
 @asynccontextmanager
@@ -153,3 +163,21 @@ async def get_plane(icao24: str, current_user: dict = Depends(get_current_user))
     if row is None:
         raise HTTPException(status_code=404, detail=f"Plane '{icao24}' not found")
     return PlaneResponse(**dict(row))
+
+
+@app.get("/route/{icao24}", response_model=list[RouteFlight])
+async def get_route(icao24: str, current_user: dict = Depends(get_current_user)):
+    """Return recent flight routes for an aircraft from the OpenSky Network (last 1 day)."""
+    import httpx
+    try:
+        flights = await asyncio.to_thread(get_flight_route, icao24)
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(
+            status_code=502,
+            detail=f"OpenSky returned {e.response.status_code}: {e.response.text[:200]}",
+        )
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="OpenSky request timed out")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Could not fetch route data: {e}")
+    return [RouteFlight(**f) for f in flights]

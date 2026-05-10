@@ -48,6 +48,15 @@ export interface PlaneResponse {
   owner: string | null;
 }
 
+export interface RouteFlight {
+  is_live: boolean;
+  callsign: string | null;
+  departure_airport: string | null;
+  arrival_airport: string | null;
+  first_seen: string | null;
+  last_seen: string | null;
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     ...init,
@@ -121,6 +130,12 @@ export const api = {
 
   plane(icao24: string, access_token: string) {
     return request<PlaneResponse>(`/planes/${icao24}`, {
+      headers: { Authorization: `Bearer ${access_token}` },
+    });
+  },
+
+  route(icao24: string, access_token: string) {
+    return request<RouteFlight[]>(`/route/${icao24}`, {
       headers: { Authorization: `Bearer ${access_token}` },
     });
   },
