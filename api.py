@@ -103,11 +103,18 @@ async def get_flights_in_extent(
 ):
     """Return the most recent position for each aircraft within the given bounding box."""
     if min_lon >= max_lon or min_lat >= max_lat:
-        raise HTTPException(status_code=400, detail="Invalid bounding box: min values must be less than max values")
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid bounding box: min values must be less than max values",
+        )
     if not (-180 <= min_lon <= 180 and -180 <= max_lon <= 180):
-        raise HTTPException(status_code=400, detail="Longitude must be between -180 and 180")
+        raise HTTPException(
+            status_code=400, detail="Longitude must be between -180 and 180"
+        )
     if not (-90 <= min_lat <= 90 and -90 <= max_lat <= 90):
-        raise HTTPException(status_code=400, detail="Latitude must be between -90 and 90")
+        raise HTTPException(
+            status_code=400, detail="Latitude must be between -90 and 90"
+        )
 
     query = """
         SELECT DISTINCT ON (fd.icao24)

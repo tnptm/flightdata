@@ -10,19 +10,20 @@ from dotenv import load_dotenv
 
 load_dotenv()
 db_connection_params = {
-    k: v for k, v in {
+    k: v
+    for k, v in {
         "dbname": os.getenv("DBASE"),
         "user": os.getenv("DBUSER"),
         "password": os.getenv("DBPASS"),
         "host": os.getenv("DBHOST"),
         "port": int(os.getenv("DBPORT", 5432)) if os.getenv("DBPORT") else None,
-    }.items() if v is not None
+    }.items()
+    if v is not None
 }
 
 
-
 # Datasamble to create sql for creating tables
-# planes from https://opensky-network.org/datasets/#metadata/: 
+# planes from https://opensky-network.org/datasets/#metadata/:
 # 'icao24','timestamp','acars','adsb','built','categoryDescription','country','engines','firstFlightDate','firstSeen','icaoAircraftClass','lineNumber','manufacturerIcao','manufacturerName','model','modes','nextReg','notes','operator','operatorCallsign','operatorIata','operatorIcao','owner','prevReg','regUntil','registered','registration','selCal','serialNumber','status','typecode','vdl'
 # '000000','2017-10-19 18:30:18',0,0,,'',,'',,,'','','','',unknow,0,'','','','','','','','',,,'','','','','',0
 planes_sql: LiteralString = """CREATE TABLE IF NOT EXISTS planes (
@@ -117,12 +118,18 @@ refresh_tokens_sql: LiteralString = """CREATE TABLE IF NOT EXISTS refresh_tokens
 );
 """
 
-#planes_table_sql = sql.SQL(planes_sql)
+# planes_table_sql = sql.SQL(planes_sql)
 
-list_of_table_sqls = [planes_sql, download_batch_sql, flight_data_sql, users_sql, refresh_tokens_sql]
+list_of_table_sqls = [
+    planes_sql,
+    download_batch_sql,
+    flight_data_sql,
+    users_sql,
+    refresh_tokens_sql,
+]
 
 
-def parse_table_name_from_sql(table_sql: str) -> LiteralString|None:
+def parse_table_name_from_sql(table_sql: str) -> LiteralString | None:
     """Extracts table name from a CREATE TABLE SQL statement."""
     # This is a simple implementation and may not cover all edge cases.
     tokens = table_sql.split()
@@ -136,18 +143,24 @@ def parse_table_name_from_sql(table_sql: str) -> LiteralString|None:
             return tokens[table_index]  # type: ignore
     return None
 
+
 def create_tables():
     with psycopg.connect(**db_connection_params) as conn:
         for table_sql in list_of_table_sqls:
-            with conn.cursor() as cur:
-                table_name = parse_table_name_from_sql(table_sql)
-                if table_name is None:
-                    print("Could not parse table name from SQL. Skipping.")
-                    continue
-                print(f"Creating table name: {table_name}")
-                cur.execute(sql.SQL(table_sql))
+            table_name = parse_table_name_from_sql(table_sql)
+            if table_name is None:
+                print("Could not parse table name from SQL. Skipping.")
+                continue
+            try:
+                with conn.cursor() as cur:
+                    print(f"Creating table: {table_name}")
+                    cur.execute(sql.SQL(table_sql))
                 conn.commit()
                 print(f"Table {table_name} created successfully.")
+            except Exception as e:
+                print(f"Error creating table {table_name}: {e}")
+                conn.rollback()
+
 
 def read_planes_from_csv(csv_file_path: str) -> list[dict]:
     """Read CSV plane data (single-quote delimited) and return as list of dicts."""
@@ -175,34 +188,76 @@ def read_planes_from_csv(csv_file_path: str) -> list[dict]:
     print(f"Read {len(data)} rows from CSV.")
     return data
 
+
 def upload_planes_data(data: list[dict]):
     """read csv plane data as described in planes_sql and insert into planes table"""
-    #data: list[dict] = []
-
+    # data: list[dict] = []
 
     with psycopg.connect(**db_connection_params) as conn:
         with conn.cursor() as cur:
             for row in data:
                 try:
-                    cur.execute("""
+                    cur.execute(
+                        """
                         INSERT INTO planes (icao24, timestamp, acars, adsb, built, categoryDescription, country, engines, firstFlightDate, firstSeen, icaoAircraftClass, lineNumber,
                         manufacturerIcao, manufacturerName, model, modes, nextReg, notes, operator, operatorCallsign, operatorIata, operatorIcao, owner, prevReg, regUntil,
                         registered, registration, selCal, serialNumber, status, typecode, vdl)
                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                         ON CONFLICT (icao24) DO NOTHING
-                    """, (row.get("icao24"), row.get("timestamp"), row.get("acars"), row.get("adsb"), row.get("built"), row.get("categoryDescription"), row.get("country"), row.get("engines"), row.get("firstFlightDate"), row.get("firstSeen"), row.get("icaoAircraftClass"), row.get("lineNumber"),
-                        row.get("manufacturerIcao"), row.get("manufacturerName"), row.get("model"), row.get("modes"), row.get("nextReg"), row.get("notes"), row.get("operator"),
-                        row.get("operatorCallsign"), row.get("operatorIata"), row.get("operatorIcao"), row.get("owner"), row.get("prevReg"), row.get("regUntil"),
-                        row.get("registered"), row.get("registration"), row.get("selCal"), row.get("serialNumber"), row.get("status"), row.get("typecode"),
-                        row.get("vdl")))
+                    """,
+                        (
+                            row.get("icao24"),
+                            row.get("timestamp"),
+                            row.get("acars"),
+                            row.get("adsb"),
+                            row.get("built"),
+                            row.get("categoryDescription"),
+                            row.get("country"),
+                            row.get("engines"),
+                            row.get("firstFlightDate"),
+                            row.get("firstSeen"),
+                            row.get("icaoAircraftClass"),
+                            row.get("lineNumber"),
+                            row.get("manufacturerIcao"),
+                            row.get("manufacturerName"),
+                            row.get("model"),
+                            row.get("modes"),
+                            row.get("nextReg"),
+                            row.get("notes"),
+                            row.get("operator"),
+                            row.get("operatorCallsign"),
+                            row.get("operatorIata"),
+                            row.get("operatorIcao"),
+                            row.get("owner"),
+                            row.get("prevReg"),
+                            row.get("regUntil"),
+                            row.get("registered"),
+                            row.get("registration"),
+                            row.get("selCal"),
+                            row.get("serialNumber"),
+                            row.get("status"),
+                            row.get("typecode"),
+                            row.get("vdl"),
+                        ),
+                    )
                 except Exception as e:
                     print(f"Error inserting row into database: {e}")
                     continue
-            conn.commit()
-            print(f"Uploaded {len(data)} rows to planes table successfully.")
+            try:
+                conn.commit()
+                print(f"Uploaded {len(data)} rows to planes table successfully.")
+            except Exception as e:
+                print(f"Error committing planes data: {e}")
+                conn.rollback()
+                raise
+
 
 if __name__ == "__main__":
-    if len(sys.argv) > 2 and sys.argv[1] == "--upload-planes" and re.match(r"^[\w,\s-]+\.csv$", sys.argv[2]):
+    if (
+        len(sys.argv) > 2
+        and sys.argv[1] == "--upload-planes"
+        and re.match(r"^[\w,\s-]+\.csv$", sys.argv[2])
+    ):
         print("Uploading planes data from CSV file...")
         try:
             data = read_planes_from_csv(sys.argv[2])

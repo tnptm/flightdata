@@ -1,22 +1,22 @@
 import httpx
 from datetime import datetime, timedelta
 import json
-#import os
+# import os
+
 
 class TokenInitialization:
     """Initializes the TokenManager with credentials from a JSON file."""
-      
+
     def __init__(self, credentials_file: str):
-        with open(credentials_file, 'r') as f:
+        with open(credentials_file, "r") as f:
             creds = json.load(f)
-        self.client_id = creds['clientId']
-        self.client_secret = creds['clientSecret']
-        
+        self.client_id = creds["clientId"]
+        self.client_secret = creds["clientSecret"]
 
 
-#TOKEN_URL = "https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token"
-#CLIENT_ID = "your_client_id"
-#CLIENT_SECRET = "your_client_secret"
+# TOKEN_URL = "https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token"
+# CLIENT_ID = "your_client_id"
+# CLIENT_SECRET = "your_client_secret"
 
 # How many seconds before expiry to proactively refresh the token.
 TOKEN_REFRESH_MARGIN = 30
@@ -50,7 +50,9 @@ class TokenManager:
         data = r.json()
         self.token = data["access_token"]
         expires_in = data.get("expires_in", 1800)
-        self.expires_at = datetime.now() + timedelta(seconds=expires_in - TOKEN_REFRESH_MARGIN)
+        self.expires_at = datetime.now() + timedelta(
+            seconds=expires_in - TOKEN_REFRESH_MARGIN
+        )
         return self.token
 
     def headers(self):
@@ -61,8 +63,10 @@ class TokenManager:
 if __name__ == "__main__":
     # Create a single shared instance for your script.
     token_creds = TokenInitialization("token_credentials.json")
-    tokens = TokenManager(token_url="https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token",
-                           credentials=token_creds)
+    tokens = TokenManager(
+        token_url="https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token",
+        credentials=token_creds,
+    )
 
     # Use it for any API call - the token is refreshed automatically.
     response = httpx.get(
