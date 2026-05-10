@@ -24,6 +24,7 @@ router = APIRouter()
 # Pydantic models
 # ---------------------------------------------------------------------------
 
+
 class UserCreate(BaseModel):
     username: str
     email: EmailStr
@@ -66,16 +67,22 @@ class RefreshRequest(BaseModel):
 # Auth endpoints  (/auth/*)
 # ---------------------------------------------------------------------------
 
-@router.post("/auth/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+
+@router.post(
+    "/auth/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED
+)
 async def register(body: UserCreate, request: Request):
     pool: asyncpg.Pool = request.app.state.pool
     async with pool.acquire() as conn:
         existing = await conn.fetchrow(
             "SELECT user_id FROM users WHERE username = $1 OR email = $2",
-            body.username, body.email,
+            body.username,
+            body.email,
         )
         if existing:
-            raise HTTPException(status_code=409, detail="Username or email already registered")
+            raise HTTPException(
+                status_code=409, detail="Username or email already registered"
+            )
 
         row = await conn.fetchrow(
             """
@@ -83,7 +90,9 @@ async def register(body: UserCreate, request: Request):
             VALUES ($1, $2, $3)
             RETURNING user_id, username, email, is_active, is_admin, created_at
             """,
-            body.username, body.email, hash_password(body.password),
+            body.username,
+            body.email,
+            hash_password(body.password),
         )
     return UserResponse(**dict(row))
 
@@ -97,18 +106,28 @@ async def login(form: OAuth2PasswordRequestForm = Depends(), request: Request = 
             form.username,
         )
         if user is None or not verify_password(form.password, user["hashed_password"]):
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials"
+            )
         if not user["is_active"]:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account disabled")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Account disabled"
+            )
 
         refresh_token = create_refresh_token()
-        expires_at = datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+        expires_at = datetime.now(timezone.utc) + timedelta(
+            days=REFRESH_TOKEN_EXPIRE_DAYS
+        )
         await conn.execute(
             "INSERT INTO refresh_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)",
-            user["user_id"], hash_token(refresh_token), expires_at,
+            user["user_id"],
+            hash_token(refresh_token),
+            expires_at,
         )
 
-    access_token = create_access_token(user["user_id"], user["username"], user["is_admin"])
+    access_token = create_access_token(
+        user["user_id"], user["username"], user["is_admin"]
+    )
     return TokenPair(access_token=access_token, refresh_token=refresh_token)
 
 
@@ -128,21 +147,33 @@ async def refresh(body: RefreshRequest, request: Request):
             token_hash,
         )
         if row is None or row["revoked"]:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or revoked refresh token")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or revoked refresh token",
+            )
         if row["expires_at"] < datetime.now(timezone.utc):
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token expired")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token expired"
+            )
         if not row["is_active"]:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account disabled")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Account disabled"
+            )
 
         # Rotate: revoke old, issue new
         await conn.execute(
-            "UPDATE refresh_tokens SET revoked = TRUE WHERE token_id = $1", row["token_id"]
+            "UPDATE refresh_tokens SET revoked = TRUE WHERE token_id = $1",
+            row["token_id"],
         )
         new_refresh = create_refresh_token()
-        expires_at = datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+        expires_at = datetime.now(timezone.utc) + timedelta(
+            days=REFRESH_TOKEN_EXPIRE_DAYS
+        )
         await conn.execute(
             "INSERT INTO refresh_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)",
-            row["user_id"], hash_token(new_refresh), expires_at,
+            row["user_id"],
+            hash_token(new_refresh),
+            expires_at,
         )
 
     access_token = create_access_token(row["user_id"], row["username"], row["is_admin"])
@@ -159,15 +190,21 @@ async def logout(body: RefreshRequest, request: Request):
             token_hash,
         )
     if result == "UPDATE 0":
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Token not found or already revoked")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Token not found or already revoked",
+        )
 
 
 # ---------------------------------------------------------------------------
 # User management endpoints  (/users/*)
 # ---------------------------------------------------------------------------
 
+
 @router.get("/users/me", response_model=UserResponse)
-async def get_me(current_user: dict = Depends(get_current_user), request: Request = None):
+async def get_me(
+    current_user: dict = Depends(get_current_user), request: Request = None
+):
     pool: asyncpg.Pool = request.app.state.pool
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
@@ -178,23 +215,31 @@ async def get_me(current_user: dict = Depends(get_current_user), request: Reques
 
 
 @router.put("/users/me", response_model=UserResponse)
-async def update_me(body: UserUpdate, current_user: dict = Depends(get_current_user), request: Request = None):
+async def update_me(
+    body: UserUpdate,
+    current_user: dict = Depends(get_current_user),
+    request: Request = None,
+):
     pool: asyncpg.Pool = request.app.state.pool
     async with pool.acquire() as conn:
         if body.email is not None:
             conflict = await conn.fetchrow(
                 "SELECT user_id FROM users WHERE email = $1 AND user_id != $2",
-                body.email, current_user["user_id"],
+                body.email,
+                current_user["user_id"],
             )
             if conflict:
                 raise HTTPException(status_code=409, detail="Email already in use")
             await conn.execute(
-                "UPDATE users SET email = $1 WHERE user_id = $2", body.email, current_user["user_id"]
+                "UPDATE users SET email = $1 WHERE user_id = $2",
+                body.email,
+                current_user["user_id"],
             )
         if body.password is not None:
             await conn.execute(
                 "UPDATE users SET hashed_password = $1 WHERE user_id = $2",
-                hash_password(body.password), current_user["user_id"],
+                hash_password(body.password),
+                current_user["user_id"],
             )
         row = await conn.fetchrow(
             "SELECT user_id, username, email, is_active, is_admin, created_at FROM users WHERE user_id = $1",
@@ -219,4 +264,6 @@ async def delete_user(user_id: int, request: Request, _: dict = Depends(require_
     async with pool.acquire() as conn:
         result = await conn.execute("DELETE FROM users WHERE user_id = $1", user_id)
     if result == "DELETE 0":
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+        )

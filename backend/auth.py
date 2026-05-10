@@ -63,12 +63,18 @@ def decode_access_token(token: str) -> dict:
     try:
         return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
     except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired"
+        )
     except jwt.InvalidTokenError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
+        )
 
 
-async def get_current_user(request: Request, token: str = Depends(oauth2_scheme)) -> dict:
+async def get_current_user(
+    request: Request, token: str = Depends(oauth2_scheme)
+) -> dict:
     payload = decode_access_token(token)
     pool = request.app.state.pool
     async with pool.acquire() as conn:
@@ -77,11 +83,16 @@ async def get_current_user(request: Request, token: str = Depends(oauth2_scheme)
             int(payload["sub"]),
         )
     if user is None or not user["is_active"]:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found or inactive",
+        )
     return dict(user)
 
 
 async def require_admin(current_user: dict = Depends(get_current_user)) -> dict:
     if not current_user["is_admin"]:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required"
+        )
     return current_user
