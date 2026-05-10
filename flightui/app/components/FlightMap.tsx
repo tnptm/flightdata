@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useCallback } from "react";
 import type { Map as LeafletMap, Marker } from "leaflet";
-import type { FlightResponse, PlaneResponse } from "../lib/api";
+import type { FlightResponse, PlaneResponse, RouteFlight } from "../lib/api";
 import { api } from "../lib/api";
 
 interface FlightMapProps {
@@ -21,6 +21,7 @@ export default function FlightMap({ flights, accessToken, onBoundsChange }: Flig
   const mapRef = useRef<LeafletMap | null>(null);
   const markersRef = useRef<Map<string, Marker>>(new Map());
   const planeCacheRef = useRef<Map<string, PlaneResponse | null>>(new Map());
+  const routeCacheRef = useRef<Map<string, RouteFlight[] | null>>(new Map());
   const accessTokenRef = useRef(accessToken);
   useEffect(() => { accessTokenRef.current = accessToken; }, [accessToken]);
 
@@ -128,7 +129,7 @@ export default function FlightMap({ flights, accessToken, onBoundsChange }: Flig
           ? `${flight.true_track.toFixed(1)}°`
           : "—";
 
-        const basePopup = (planeData?: PlaneResponse | null) => {
+        const basePopup = (planeData?: PlaneResponse | null, routeData?: RouteFlight[] | null) => {
           const lines = [
             `<b>${flight.callsign?.trim() || flight.icao24}</b> <span style="color:#888;font-size:0.85em">(${flight.icao24.toUpperCase()})</span>`,
             `<b>Country:</b> ${flight.origin_country ?? "—"}`,
@@ -156,6 +157,27 @@ export default function FlightMap({ flights, accessToken, onBoundsChange }: Flig
             if (planeData.categoryDescription) lines.push(`<b>Category:</b> ${planeData.categoryDescription}`);
           }
 
+          if (routeData === undefined) {
+            lines.push(`<hr style="margin:4px 0"><i style="color:#888">Loading route…</i>`);
+          } else if (routeData && routeData.length > 0) {
+            lines.push(`<hr style="margin:4px 0"><b>Route Info</b>`);
+            for (const f of routeData.slice(0, 3)) {
+              if (f.is_live) {
+                const since = f.first_seen
+                  ? new Date(f.first_seen).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
+                  : "?";
+                lines.push(`✈ Live track · airborne since ${since} UTC`);
+              } else {
+                const dep = f.departure_airport ?? "?";
+                const arr = f.arrival_airport ?? "?";
+                const date = f.first_seen
+                  ? new Date(f.first_seen).toLocaleDateString(undefined, { month: "short", day: "numeric" })
+                  : "";
+                lines.push(`${dep} → ${arr}${date ? ` <span style="color:#888;font-size:0.85em">(${date})</span>` : ""}`);
+              }
+            }
+          }
+
           return lines.join("<br>");
         };
 
@@ -163,38 +185,56 @@ export default function FlightMap({ flights, accessToken, onBoundsChange }: Flig
           const marker = markersRef.current.get(flight.icao24);
           if (!marker || !accessTokenRef.current) return;
 
-          // Serve from cache if already fetched
-          if (planeCacheRef.current.has(flight.icao24)) {
-            marker.setPopupContent(basePopup(planeCacheRef.current.get(flight.icao24)));
+          const planeHit = planeCacheRef.current.has(flight.icao24);
+          const routeHit = routeCacheRef.current.has(flight.icao24);
+
+          // Both cached — render immediately
+          if (planeHit && routeHit) {
+            marker.setPopupContent(basePopup(
+              planeCacheRef.current.get(flight.icao24),
+              routeCacheRef.current.get(flight.icao24),
+            ));
             return;
           }
 
-          // First open: fetch and cache
-          marker.setPopupContent(basePopup(undefined));
-          api.plane(flight.icao24, accessTokenRef.current)
-            .then((planeData) => {
-              planeCacheRef.current.set(flight.icao24, planeData);
-              if (markersRef.current.has(flight.icao24)) {
-                marker.setPopupContent(basePopup(planeData));
-              }
-            })
-            .catch(() => {
-              planeCacheRef.current.set(flight.icao24, null);
-              if (markersRef.current.has(flight.icao24)) {
-                marker.setPopupContent(basePopup(null));
-              }
-            });
+          // Show partial/loading state while fetching
+          marker.setPopupContent(basePopup(
+            planeHit ? planeCacheRef.current.get(flight.icao24) : undefined,
+            routeHit ? routeCacheRef.current.get(flight.icao24) : undefined,
+          ));
+
+          const token = accessTokenRef.current;
+          const planeFetch = planeHit
+            ? Promise.resolve(planeCacheRef.current.get(flight.icao24) as PlaneResponse | null)
+            : api.plane(flight.icao24, token).catch(() => null as PlaneResponse | null);
+          const routeFetch = routeHit
+            ? Promise.resolve(routeCacheRef.current.get(flight.icao24) as RouteFlight[] | null)
+            : api.route(flight.icao24, token).catch(() => null as RouteFlight[] | null);
+
+          Promise.all([planeFetch, routeFetch]).then(([planeData, routeData]) => {
+            if (!planeHit) planeCacheRef.current.set(flight.icao24, planeData);
+            if (!routeHit) routeCacheRef.current.set(flight.icao24, routeData);
+            if (markersRef.current.has(flight.icao24)) {
+              marker.setPopupContent(basePopup(
+                planeCacheRef.current.get(flight.icao24),
+                routeCacheRef.current.get(flight.icao24),
+              ));
+            }
+          });
         };
 
         if (existing) {
           existing.setLatLng([flight.latitude, flight.longitude]);
           existing.setIcon(icon);
-          existing.setPopupContent(basePopup(planeCacheRef.current.get(flight.icao24) ?? null));
+          existing.setPopupContent(basePopup(
+            planeCacheRef.current.get(flight.icao24) ?? null,
+            routeCacheRef.current.get(flight.icao24) ?? null,
+          ));
           existing.off("popupopen");  // prevent handler accumulation without touching click
           existing.on("popupopen", onPopupOpen);
         } else {
           const marker = L.marker([flight.latitude, flight.longitude], { icon })
-            .bindPopup(basePopup(null))
+            .bindPopup(basePopup(null, null))
             .on("popupopen", onPopupOpen)
             .addTo(map);
           markersRef.current.set(flight.icao24, marker);
