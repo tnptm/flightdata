@@ -1,0 +1,19 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+.env
+aircraft-database-complete-2025-08.csv
+aircraft-database-complete-2025-08.ods
+
+flight_data_updater.log
+fastapi/users.py
+opensky-credentials.json
+all.json
+.~lock.aircraft-database-complete-2025-08.ods#
