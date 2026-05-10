@@ -20,6 +20,7 @@ export default function FlightMap({ flights, accessToken, onBoundsChange }: Flig
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletMap | null>(null);
   const markersRef = useRef<Map<string, Marker>>(new Map());
+  const planeCacheRef = useRef<Map<string, PlaneResponse | null>>(new Map());
   const accessTokenRef = useRef(accessToken);
   useEffect(() => { accessTokenRef.current = accessToken; }, [accessToken]);
 
@@ -93,7 +94,7 @@ export default function FlightMap({ flights, accessToken, onBoundsChange }: Flig
       const planeIcon = (track: number | null) =>
         L.divIcon({
           className: "",
-          html: `<div style="transform:rotate(${(track ?? 0) - 90}deg);font-size:18px;line-height:1;">✈</div>`,
+          html: `<div style="transform:rotate(${(track ?? 0) - 90}deg);font-size:18px;line-height:1;color:#1e3a8a;">✈</div>`,
           iconSize: [20, 20],
           iconAnchor: [10, 10],
         });
@@ -158,18 +159,27 @@ export default function FlightMap({ flights, accessToken, onBoundsChange }: Flig
           return lines.join("<br>");
         };
 
-        const onClickPopup = () => {
+        const onPopupOpen = () => {
           const marker = markersRef.current.get(flight.icao24);
           if (!marker || !accessTokenRef.current) return;
-          // Show loading state
+
+          // Serve from cache if already fetched
+          if (planeCacheRef.current.has(flight.icao24)) {
+            marker.setPopupContent(basePopup(planeCacheRef.current.get(flight.icao24)));
+            return;
+          }
+
+          // First open: fetch and cache
           marker.setPopupContent(basePopup(undefined));
           api.plane(flight.icao24, accessTokenRef.current)
             .then((planeData) => {
+              planeCacheRef.current.set(flight.icao24, planeData);
               if (markersRef.current.has(flight.icao24)) {
                 marker.setPopupContent(basePopup(planeData));
               }
             })
             .catch(() => {
+              planeCacheRef.current.set(flight.icao24, null);
               if (markersRef.current.has(flight.icao24)) {
                 marker.setPopupContent(basePopup(null));
               }
@@ -179,13 +189,13 @@ export default function FlightMap({ flights, accessToken, onBoundsChange }: Flig
         if (existing) {
           existing.setLatLng([flight.latitude, flight.longitude]);
           existing.setIcon(icon);
-          existing.setPopupContent(basePopup(null));
-          existing.off("click", onClickPopup);
-          existing.on("click", onClickPopup);
+          existing.setPopupContent(basePopup(planeCacheRef.current.get(flight.icao24) ?? null));
+          existing.off("popupopen");  // prevent handler accumulation without touching click
+          existing.on("popupopen", onPopupOpen);
         } else {
           const marker = L.marker([flight.latitude, flight.longitude], { icon })
             .bindPopup(basePopup(null))
-            .on("click", onClickPopup)
+            .on("popupopen", onPopupOpen)
             .addTo(map);
           markersRef.current.set(flight.icao24, marker);
         }
