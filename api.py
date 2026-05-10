@@ -140,7 +140,7 @@ async def get_plane(icao24: str, current_user: dict = Depends(get_current_user))
     """Return static aircraft metadata from the planes table."""
     async with app.state.pool.acquire() as conn:
         row = await conn.fetchrow(
-            "SELECT * FROM planes WHERE icao24 = $1",
+            "SELECT * FROM planes WHERE icao24 ILIKE $1",
             icao24.lower(),
         )
     if row is None:

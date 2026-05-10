@@ -100,7 +100,7 @@ export default function DashboardPage() {
 
       {/* Map fills remaining height */}
       <main className="flex-1 relative">
-        <FlightMap flights={flights} onBoundsChange={handleBoundsChange} />
+        <FlightMap flights={flights} accessToken={accessToken} onBoundsChange={handleBoundsChange} />
       </main>
     </div>
   );

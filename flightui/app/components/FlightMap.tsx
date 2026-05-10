@@ -2,10 +2,12 @@
 
 import { useEffect, useRef, useCallback } from "react";
 import type { Map as LeafletMap, Marker } from "leaflet";
-import type { FlightResponse } from "../lib/api";
+import type { FlightResponse, PlaneResponse } from "../lib/api";
+import { api } from "../lib/api";
 
 interface FlightMapProps {
   flights: FlightResponse[];
+  accessToken: string | null;
   onBoundsChange: (bounds: {
     minLon: number;
     minLat: number;
@@ -14,10 +16,12 @@ interface FlightMapProps {
   }) => void;
 }
 
-export default function FlightMap({ flights, onBoundsChange }: FlightMapProps) {
+export default function FlightMap({ flights, accessToken, onBoundsChange }: FlightMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletMap | null>(null);
   const markersRef = useRef<Map<string, Marker>>(new Map());
+  const accessTokenRef = useRef(accessToken);
+  useEffect(() => { accessTokenRef.current = accessToken; }, [accessToken]);
 
   // Stable callback ref to avoid re-mounting the map on re-render
   const onBoundsChangeRef = useRef(onBoundsChange);
@@ -89,7 +93,7 @@ export default function FlightMap({ flights, onBoundsChange }: FlightMapProps) {
       const planeIcon = (track: number | null) =>
         L.divIcon({
           className: "",
-          html: `<div style="transform:rotate(${track ?? 0}deg);font-size:18px;line-height:1;">✈</div>`,
+          html: `<div style="transform:rotate(${(track ?? 0) - 90}deg);font-size:18px;line-height:1;">✈</div>`,
           iconSize: [20, 20],
           iconAnchor: [10, 10],
         });
@@ -107,22 +111,77 @@ export default function FlightMap({ flights, onBoundsChange }: FlightMapProps) {
         if (flight.latitude == null || flight.longitude == null) continue;
         const existing = markersRef.current.get(flight.icao24);
         const icon = planeIcon(flight.true_track);
-        const popup = [
-          `<b>${flight.callsign?.trim() || flight.icao24}</b>`,
-          `Country: ${flight.origin_country ?? "—"}`,
-          `Alt: ${flight.baro_altitude != null ? flight.baro_altitude.toFixed(0) + " m" : "—"}`,
-          `Speed: ${flight.velocity != null ? flight.velocity.toFixed(0) + " m/s" : "—"}`,
-          `On ground: ${flight.on_ground ? "Yes" : "No"}`,
-          `Updated: ${new Date(flight.timestamp).toLocaleTimeString()}`,
-        ].join("<br>");
+
+        const metersToFt = (m: number) => Math.round(m * 3.28084).toLocaleString();
+        const baroM = flight.baro_altitude;
+        const altStr = baroM != null
+          ? `${baroM.toFixed(0)} m / ${metersToFt(baroM)} ft`
+          : "—";
+        const speedKmh = flight.velocity != null
+          ? ` (${(flight.velocity * 3.6).toFixed(0)} km/h)`
+          : "";
+        const speedStr = flight.velocity != null
+          ? `${flight.velocity.toFixed(0)} m/s${speedKmh}`
+          : "—";
+
+        const basePopup = (planeData?: PlaneResponse | null) => {
+          const lines = [
+            `<b>${flight.callsign?.trim() || flight.icao24}</b> <span style="color:#888;font-size:0.85em">(${flight.icao24.toUpperCase()})</span>`,
+            `<b>Country:</b> ${flight.origin_country ?? "—"}`,
+            `<b>Altitude:</b> ${altStr}`,
+            `<b>Speed:</b> ${speedStr}`,
+            `<b>On ground:</b> ${flight.on_ground ? "Yes" : "No"}`,
+            `<b>Updated:</b> ${new Date(flight.timestamp).toLocaleTimeString()}`,
+          ];
+
+          if (planeData === undefined) {
+            lines.push(`<hr style="margin:4px 0"><i style="color:#888">Loading aircraft data…</i>`);
+          } else if (planeData === null) {
+            // no data available — omit section
+          } else {
+            lines.push(`<hr style="margin:4px 0"><b>Aircraft</b>`);
+            if (planeData.manufacturerName) lines.push(`<b>Manufacturer:</b> ${planeData.manufacturerName}`);
+            if (planeData.model) lines.push(`<b>Model:</b> ${planeData.model}`);
+            if (planeData.typecode) lines.push(`<b>Type:</b> ${planeData.typecode}`);
+            if (planeData.registration) lines.push(`<b>Registration:</b> ${planeData.registration}`);
+            if (planeData.operator) lines.push(`<b>Operator:</b> ${planeData.operator}`);
+            if (planeData.owner) lines.push(`<b>Owner:</b> ${planeData.owner}`);
+            if (planeData.built) lines.push(`<b>Built:</b> ${planeData.built}`);
+            if (planeData.engines) lines.push(`<b>Engines:</b> ${planeData.engines}`);
+            if (planeData.categoryDescription) lines.push(`<b>Category:</b> ${planeData.categoryDescription}`);
+          }
+
+          return lines.join("<br>");
+        };
+
+        const onClickPopup = () => {
+          const marker = markersRef.current.get(flight.icao24);
+          if (!marker || !accessTokenRef.current) return;
+          // Show loading state
+          marker.setPopupContent(basePopup(undefined));
+          api.plane(flight.icao24, accessTokenRef.current)
+            .then((planeData) => {
+              if (markersRef.current.has(flight.icao24)) {
+                marker.setPopupContent(basePopup(planeData));
+              }
+            })
+            .catch(() => {
+              if (markersRef.current.has(flight.icao24)) {
+                marker.setPopupContent(basePopup(null));
+              }
+            });
+        };
 
         if (existing) {
           existing.setLatLng([flight.latitude, flight.longitude]);
           existing.setIcon(icon);
-          existing.setPopupContent(popup);
+          existing.setPopupContent(basePopup(null));
+          existing.off("click", onClickPopup);
+          existing.on("click", onClickPopup);
         } else {
           const marker = L.marker([flight.latitude, flight.longitude], { icon })
-            .bindPopup(popup)
+            .bindPopup(basePopup(null))
+            .on("click", onClickPopup)
             .addTo(map);
           markersRef.current.set(flight.icao24, marker);
         }
