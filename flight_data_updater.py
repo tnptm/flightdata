@@ -69,7 +69,7 @@ async def get_flight_data(bearer_token: str) -> list[dict]:
 async def save_flight_data_to_db(flight_data: list[list], batch_id: int) -> bool:
     conn = await asyncpg.connect(**db_connection_params)
     time_now = datetime.now()
-    print(flight_data[0:5])
+    #print(flight_data[0:5])
     for flight in flight_data:
         flight_obj = FlightData(
             icao24=flight[0],
