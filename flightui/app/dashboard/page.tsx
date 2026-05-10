@@ -102,6 +102,32 @@ export default function DashboardPage() {
       <main className="flex-1 relative">
         <FlightMap flights={flights} accessToken={accessToken} onBoundsChange={handleBoundsChange} />
       </main>
+
+      {/* Footer — data source attribution */}
+      <footer className="px-4 py-1 bg-white border-t border-gray-200 text-xs text-gray-400 flex flex-wrap gap-x-4">
+        <span>
+          Flight data:{" "}
+          <a
+            href="https://opensky-network.org"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-gray-600"
+          >
+            The OpenSky Network
+          </a>
+        </span>
+        <span>
+          Map tiles:{" "}
+          <a
+            href="https://www.openstreetmap.org/copyright"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-gray-600"
+          >
+            © OpenStreetMap contributors
+          </a>
+        </span>
+      </footer> 
     </div>
   );
 }

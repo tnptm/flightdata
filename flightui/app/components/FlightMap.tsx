@@ -123,6 +123,9 @@ export default function FlightMap({ flights, accessToken, onBoundsChange }: Flig
         const speedStr = flight.velocity != null
           ? `${flight.velocity.toFixed(0)} m/s${speedKmh}`
           : "—";
+        const headingStr = flight.true_track != null
+          ? `${flight.true_track.toFixed(1)}°`
+          : "—";
 
         const basePopup = (planeData?: PlaneResponse | null) => {
           const lines = [
@@ -130,6 +133,7 @@ export default function FlightMap({ flights, accessToken, onBoundsChange }: Flig
             `<b>Country:</b> ${flight.origin_country ?? "—"}`,
             `<b>Altitude:</b> ${altStr}`,
             `<b>Speed:</b> ${speedStr}`,
+            `<b>Heading:</b> ${headingStr}`,
             `<b>On ground:</b> ${flight.on_ground ? "Yes" : "No"}`,
             `<b>Updated:</b> ${new Date(flight.timestamp).toLocaleTimeString()}`,
           ];
